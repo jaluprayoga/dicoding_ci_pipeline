@@ -1,0 +1,90 @@
+name: ML System CI Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+env:
+  DAGSHUB_TOKEN: ${{ secrets.DAGSHUB_TOKEN }}
+  DAGSHUB_REPO_OWNER: "jaluprayoga"
+  DAGSHUB_REPO_NAME: "dicoding_eksperimen_sistem_ml"
+  MLFLOW_TRACKING_URI: "https://dagshub.com/jaluprayoga/dicoding_eksperimen_sistem_ml.mlflow"
+  MLFLOW_TRACKING_USERNAME: "jaluprayoga"
+  MLFLOW_TRACKING_PASSWORD: ${{ secrets.DAGSHUB_TOKEN }}
+  CSV_URL: "https://raw.githubusercontent.com/jaluprayoga/dicoding_eksperimen_sistem_ml/main/customer_churn_preprocessed"
+  TARGET_VAR: "Churn"
+  MODEL_NAME: "customer_churn_model"
+
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Run actions/checkout@v4
+      uses: actions/checkout@v4
+
+    - name: Set up Python 3.12.7
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12.7"
+        cache: "pip"
+
+    - name: Check Env
+      run: |
+        echo "Checking environment variables..."
+        echo "DAGSHUB_TOKEN: $DAGSHUB_TOKEN"
+        echo "DAGSHUB_REPO_OWNER: $DAGSHUB_REPO_OWNER"
+        echo "DAGSHUB_REPO_NAME: $DAGSHUB_REPO_NAME"
+        echo "CSV_URL: $CSV_URL"
+        echo "TARGET_VAR: $TARGET_VAR"
+        echo "MODEL_NAME: $MODEL_NAME"
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install mlflow==3.12.0 cloudpickle==3.1.2 numpy==2.4.6 pandas==2.3.3 pyarrow==23.0.1 scikit-learn==1.8.0 scipy==1.17.1 xgboost docker optuna matplotlib seaborn dagshub python-dotenv
+
+    - name: Run mlflow project
+      run: |
+        python MLProject/customer_churn_preprocessed/download_dataset_script.py
+        mlflow run MLProject --env-manager=local
+
+    - name: Get latest MLflow model version
+      run: |
+        MODEL_VERSION=$(python -c "import mlflow, os; client = mlflow.MlflowClient(); versions = client.search_model_versions(f\"name='{os.environ['MODEL_NAME']}'\"); print(max([int(v.version) for v in versions]) if versions else '1')")
+        echo "MODEL_VERSION=$MODEL_VERSION" >> $GITHUB_ENV
+        echo "Latest model version: $MODEL_VERSION"
+
+    - name: Upload to Github
+      uses: actions/upload-artifact@v4
+      with:
+        name: mlflow-runs-artifacts
+        path: |
+          mlruns/
+          mlartifacts/
+          mlflow.db
+
+    - name: Build Docker Model
+      run: |
+        mlflow models build-docker -m "models:/${{ env.MODEL_NAME }}/${{ env.MODEL_VERSION }}" -n "customer-churn-model:latest" --env-manager local
+
+    - name: Log in to Docker Hub
+      if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    - name: Tag Docker Image
+      if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+      run: |
+        docker tag "customer-churn-model:latest" "${{ secrets.DOCKERHUB_USERNAME }}/customer-churn-model:latest"
+
+    - name: Push Docker Image
+      if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+      run: |
+        docker push "${{ secrets.DOCKERHUB_USERNAME }}/customer-churn-model:latest"
