@@ -1,0 +1,11 @@
+name: Customer Churn Modelling Tuning
+
+conda_env: conda.yaml
+
+entry_points:
+  main:
+    parameters:
+      trials:
+        type: int
+        default: 20
+    command: "python modelling_tuning.py --trials {trials}"

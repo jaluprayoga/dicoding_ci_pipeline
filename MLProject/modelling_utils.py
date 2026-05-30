@@ -46,7 +46,15 @@ def setup_mlflow(server, experiment_name):
         except Exception:
             mlflow.set_tracking_uri("file:///./mlruns")
             print("MLflow tracking locally to directory: ./mlruns")
-            print("Tip: If you want to use the MLflow UI local server, start it in a separate terminal using: mlflow server")
+
+    # If run in 'mlflow run' context, verify if the run exists in the newly set tracking URI.
+    if "MLFLOW_RUN_ID" in os.environ:
+        run_id = os.environ["MLFLOW_RUN_ID"]
+        try:
+            mlflow.tracking.MlflowClient().get_run(run_id)
+        except Exception:
+            print(f"Warning: Run ID {run_id} from MLFLOW_RUN_ID was not found in the current tracking URI.")
+            os.environ.pop("MLFLOW_RUN_ID", None)
 
     mlflow.set_experiment(experiment_name)
 
