@@ -14,6 +14,8 @@ env:
   MLFLOW_TRACKING_URI: "https://dagshub.com/jaluprayoga/dicoding_eksperimen_sistem_ml.mlflow"
   MLFLOW_TRACKING_USERNAME: "jaluprayoga"
   MLFLOW_TRACKING_PASSWORD: ${{ secrets.DAGSHUB_TOKEN }}
+  DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+  DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
   CSV_URL: "https://raw.githubusercontent.com/jaluprayoga/dicoding_eksperimen_sistem_ml/main/customer_churn_preprocessed"
   TARGET_VAR: "Churn"
   MODEL_NAME: "customer_churn_model"
@@ -73,18 +75,18 @@ jobs:
         mlflow models build-docker -m "models:/${{ env.MODEL_NAME }}/${{ env.MODEL_VERSION }}" -n "customer-churn-model:latest" --env-manager local
 
     - name: Log in to Docker Hub
-      if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+      if: ${{ env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' }}
       uses: docker/login-action@v3
       with:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}
 
     - name: Tag Docker Image
-      if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+      if: ${{ env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' }}
       run: |
         docker tag "customer-churn-model:latest" "${{ secrets.DOCKERHUB_USERNAME }}/customer-churn-model:latest"
 
     - name: Push Docker Image
-      if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+      if: ${{ env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' }}
       run: |
         docker push "${{ secrets.DOCKERHUB_USERNAME }}/customer-churn-model:latest"
