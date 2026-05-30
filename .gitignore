@@ -1,0 +1,16 @@
+# Python cache
+__pycache__/
+*.pyc
+
+# Environments and Secrets
+.env
+.venv/
+venv/
+
+# MLflow local tracking
+mlruns/
+mlartifacts/
+mlflow.db
+
+.vscode/
+.github/

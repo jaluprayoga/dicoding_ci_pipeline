@@ -1,0 +1,15 @@
+# Version Control
+.gitignore
+
+# Environments and Secrets
+.env
+.venv/
+
+# Python Cache
+**/__pycache__/
+.ipynb_checkpoints/
+
+# MLflow local tracking & Artifacts
+mlruns/
+mlartifacts/
+mlflow.db

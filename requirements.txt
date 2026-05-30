@@ -1,0 +1,11 @@
+pandas
+numpy
+scikit-learn
+xgboost
+optuna
+mlflow
+dagshub
+python-dotenv
+pydantic
+matplotlib
+seaborn
