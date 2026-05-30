@@ -16,6 +16,7 @@ env:
   MLFLOW_TRACKING_PASSWORD: ${{ secrets.DAGSHUB_TOKEN }}
   DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
   DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+  MLFLOW_EXPERIMENT_NAME: "customer_churn"
   CSV_URL: "https://raw.githubusercontent.com/jaluprayoga/dicoding_eksperimen_sistem_ml/main/customer_churn_preprocessed"
   TARGET_VAR: "Churn"
   MODEL_NAME: "customer_churn_model"
@@ -53,7 +54,7 @@ jobs:
     - name: Run mlflow project
       run: |
         python MLProject/customer_churn_preprocessed/download_dataset_script.py
-        mlflow run MLProject --env-manager=local
+        mlflow run MLProject --experiment-name customer_churn --env-manager=local
 
     - name: Get latest MLflow model version
       run: |
