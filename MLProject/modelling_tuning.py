@@ -1,4 +1,5 @@
 import argparse
+import os
 import mlflow
 import optuna
 from sklearn.linear_model import LogisticRegression
@@ -62,7 +63,7 @@ def main():
     args = parser.parse_args()
     best_params = run_tuning(n_trials=args.trials)
     setup_mlflow('dagshub', 'customer_churn')
-    model_name = "Logistic Regression-Optuna"
+    model_name = os.getenv("MODEL_NAME", "Logistic Regression-Optuna")
     input_example=X_train_smote[0:5]
 
     with mlflow.start_run(run_name= model_name):
