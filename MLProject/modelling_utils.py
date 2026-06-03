@@ -12,11 +12,20 @@ import mlflow
 import mlflow.sklearn
 from sklearn.utils import estimator_html_repr
 from sklearn.metrics import (
-    confusion_matrix,
-    roc_curve,
-    auc,
-    classification_report
+    classification_report,
+    ConfusionMatrixDisplay,
+    RocCurveDisplay,
+    PrecisionRecallDisplay,
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+    roc_auc_score,
+    log_loss,
+    confusion_matrix
 )
+import numpy as np
+import tempfile
 from dotenv import load_dotenv
 
 # Force UTF-8 encoding
@@ -74,66 +83,113 @@ def load_data(dataset_dir):
     print("Datasets loaded successfully!")
     return X_train, y_train, X_train_smote, y_train_smote, X_test, y_test
 
-def save_and_log_artifacts(best_model, X_train, X_test, y_test, metrics_dict, path):
+def save_and_log_artifacts(best_model, X_train, X_test, y_test, metrics_dict, output_dir=None, path=None):
     """Generate and log evaluation plots and reports as artifacts."""
-    os.makedirs(path, exist_ok=True)
-    
+
+    if path is not None:
+        output_dir = path
+
     y_test_pred = best_model.predict(X_test)
-    y_test_prob = best_model.predict_proba(X_test)[:, 1]
 
-    def save_and_log_fig(filename):
-        full_path = os.path.join(path, filename)
+    def _write_artifacts(target_dir):
+        # 1. Confusion Matrix
+        fig_cm, ax = plt.subplots(figsize=(6, 5))
+        ConfusionMatrixDisplay.from_estimator(
+            best_model, X_test, y_test, 
+            display_labels=['No Churn', 'Churn'], 
+            cmap='Blues', ax=ax
+        )
+        plt.title('Confusion Matrix')
         plt.tight_layout()
-        plt.savefig(full_path)
-        plt.close()
-        mlflow.log_artifact(full_path)
+        fig_cm.savefig(os.path.join(target_dir, 'confusion_matrix.png'))
+        plt.close(fig_cm)
 
-    def write_and_log_file(filename, content, is_json=False):
-        full_path = os.path.join(path, filename)
-        with open(full_path, 'w', encoding='utf-8') as f:
-            if is_json:
-                json.dump(content, f, indent=4)
-            else:
-                f.write(content)
-        mlflow.log_artifact(full_path)
+        # 2. Estimator HTML representation
+        with open(os.path.join(target_dir, 'estimator.html'), 'w', encoding='utf-8') as f:
+            f.write(estimator_html_repr(best_model))
 
-    # Confusion Matrix
-    cm = confusion_matrix(y_test, y_test_pred)
-    plt.figure(figsize=(6, 5))
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
-                xticklabels=['No Churn', 'Churn'], 
-                yticklabels=['No Churn', 'Churn'])
-    plt.ylabel('Actual Label')
-    plt.xlabel('Predicted Label')
-    plt.title('Confusion Matrix')
-    save_and_log_fig('confusion_matrix.png')
+        # 3. Metric Info JSON
+        with open(os.path.join(target_dir, 'metric_info.json'), 'w', encoding='utf-8') as f:
+            json.dump(metrics_dict, f, indent=4)
 
-    # Estimator HTML representation
-    write_and_log_file('estimator.html', estimator_html_repr(best_model))
+        # 4. ROC Curve
+        fig_roc, ax = plt.subplots(figsize=(6, 5))
+        RocCurveDisplay.from_estimator(best_model, X_test, y_test, ax=ax)
+        plt.title('ROC Curve')
+        plt.tight_layout()
+        fig_roc.savefig(os.path.join(target_dir, 'roc_curve.png'))
+        plt.close(fig_roc)
 
-    # Metric Info JSON
-    write_and_log_file('metric_info.json', metrics_dict, is_json=True)
+        # 5. Classification Report
+        report_text = classification_report(y_test, y_test_pred, target_names=['No Churn', 'Churn'])
+        with open(os.path.join(target_dir, 'classification_report.txt'), 'w', encoding='utf-8') as f:
+            f.write(report_text)
 
-    # ROC Curve
-    fpr, tpr, _ = roc_curve(y_test, y_test_prob)
-    roc_auc = auc(fpr, tpr)
-    plt.figure(figsize=(6, 5))
-    plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC Curve (AUC = {roc_auc:.4f})')
-    plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
-    plt.xlim([0.0, 1.0])
-    plt.ylim([0.0, 1.05])
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('True Positive Rate')
-    plt.title('ROC Curve')
-    plt.legend(loc="lower right")
-    save_and_log_fig('roc_curve.png')
+        # 6. Precision-Recall Curve
+        fig_pr, ax = plt.subplots(figsize=(6, 5))
+        PrecisionRecallDisplay.from_estimator(best_model, X_test, y_test, ax=ax)
+        plt.title('Precision-Recall Curve')
+        plt.tight_layout()
+        fig_pr.savefig(os.path.join(target_dir, 'precision_recall_curve.png'))
+        plt.close(fig_pr)
 
-    # Classification Report
-    report_text = classification_report(y_test, y_test_pred, target_names=['No Churn', 'Churn'])
-    write_and_log_file('classification_report.txt', report_text)
+        # 7. Feature Importance Plot (Coefficients)
+        if hasattr(best_model, "coef_"):
+            coefficients = best_model.coef_[0]
+            feature_names = X_train.columns
+            indices = np.argsort(np.abs(coefficients))
+            
+            fig_fi = plt.figure(figsize=(8, 6))
+            plt.barh(range(len(indices)), coefficients[indices], align='center')
+            plt.yticks(range(len(indices)), [feature_names[i] for i in indices])
+            plt.xlabel('Coefficient Value')
+            plt.title('Feature Importance (Logistic Regression Coefficients)')
+            plt.tight_layout()
+            fig_fi.savefig(os.path.join(target_dir, 'feature_importance.png'))
+            plt.close(fig_fi)
 
-    # Save model locally
-    local_model_path = os.path.join(path, 'model')
-    if os.path.exists(local_model_path):
-        shutil.rmtree(local_model_path)
-    mlflow.sklearn.save_model(sk_model=best_model, path=local_model_path)
+        # 8. Save model locally
+        local_model_path = os.path.join(target_dir, 'model')
+        if os.path.exists(local_model_path):
+            import shutil
+            shutil.rmtree(local_model_path)
+        mlflow.sklearn.save_model(sk_model=best_model, path=local_model_path)
+
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+        _write_artifacts(output_dir)
+        mlflow.log_artifacts(output_dir)
+    else:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            _write_artifacts(tmp_dir)
+            mlflow.log_artifacts(tmp_dir)
+
+def eval_metric(model, data, target):
+    """
+    Evaluate the model performance.
+    """
+    from sklearn.metrics import (
+        accuracy_score,
+        precision_score,
+        recall_score,
+        f1_score,
+        roc_auc_score,
+        log_loss,
+        confusion_matrix
+    )
+    y_pred = model.predict(data)
+    y_prob = model.predict_proba(data)[:, 1]
+
+    accuracy = accuracy_score(target, y_pred)
+    precision = precision_score(target, y_pred, average='binary')
+    recall = recall_score(target, y_pred, average='binary')
+    f1 = f1_score(target, y_pred, average='binary')
+    roc_auc = roc_auc_score(target, y_prob)
+    log_loss_val = log_loss(target, y_prob)
+    score = model.score(data, target)
+    
+    tn, fp, fn, tp = confusion_matrix(target, y_pred).ravel()
+    specificity = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+    fpr = fp / (fp + tn) if (fp + tn) > 0 else 0.0
+    
+    return accuracy, precision, recall, f1, roc_auc, log_loss_val, score, specificity, fpr

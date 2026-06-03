@@ -4,18 +4,11 @@ import mlflow
 import optuna
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import cross_val_score
-from sklearn.metrics import (
-    accuracy_score,
-    precision_score,
-    recall_score,
-    f1_score,
-    roc_auc_score,
-    log_loss
-)
 from modelling_utils import (
     setup_mlflow,
     load_data,
-    save_and_log_artifacts
+    save_and_log_artifacts,
+    eval_metric
 )
 
 # Load Data
@@ -39,22 +32,7 @@ def run_tuning(n_trials):
 
     return study.best_params
 
-def eval_metric(model, data, target):
-    """
-    Evaluate the model performance.
-    """
-    y_pred = model.predict(data)
-    y_prob = model.predict_proba(data)[:, 1]
 
-    accuracy = accuracy_score(target, y_pred)
-    precision = precision_score(target, y_pred, average='binary')
-    recall = recall_score(target, y_pred, average='binary')
-    f1 = f1_score(target, y_pred, average='binary')
-    roc_auc = roc_auc_score(target, y_prob)
-    log_loss_val = log_loss(target, y_prob)
-    score = model.score(data, target)
-    
-    return accuracy, precision, recall, f1, roc_auc, log_loss_val, score
 
 
 def main():
@@ -72,14 +50,16 @@ def main():
         mlflow.log_params({
             'model_name': 'LR-Optuna', 
             **best_params, 
-            'input_example': input_example})
+            'input_example': input_example,
+            'optuna_n_trials': args.trials,
+            'cv_folds': 5})
 
         # Train final model
         best_model = LogisticRegression(**best_params)
         best_model.fit(X_train_smote, y_train_smote)
 
         # Calculate train metrics
-        train_accuracy, train_precision, train_recall, train_f1, train_roc_auc, train_log_loss, train_score = eval_metric(best_model, X_train_smote, y_train_smote)
+        train_accuracy, train_precision, train_recall, train_f1, train_roc_auc, train_log_loss, train_score, _, _ = eval_metric(best_model, X_train_smote, y_train_smote)
         metrics_train_dict = {
             'train_accuracy_score': train_accuracy,
             'train_precision_score': train_precision,
@@ -91,7 +71,7 @@ def main():
         }
 
         # Calculate evaluation metrics
-        accuracy, precision, recall, f1, roc_auc, log_loss, score = eval_metric(best_model, X_test, y_test)
+        accuracy, precision, recall, f1, roc_auc, log_loss, score, specificity, fpr = eval_metric(best_model, X_test, y_test)
         metrics_dict = {
             'test_accuracy': accuracy,
             'test_precision': precision,
@@ -105,11 +85,15 @@ def main():
         # Log Metrics
         mlflow.log_metrics(metrics_train_dict)
         mlflow.log_metrics(metrics_dict)
+        mlflow.log_metrics({
+            'test_specificity': specificity,
+            'test_false_positive_rate': fpr
+        })
 
         # Log Model and Register it
         mlflow.sklearn.log_model(
             sk_model=best_model,
-            name=model_name,
+            artifact_path="model",
             registered_model_name=model_name
         )
 
