@@ -2,14 +2,14 @@ import os
 import sys
 import io
 import urllib.request
-import json
-import shutil
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
 import dagshub
 import mlflow
-import mlflow.sklearn
+from dotenv import load_dotenv
+import tempfile
+import json
+import matplotlib.pyplot as plt
+import numpy as np
 from sklearn.utils import estimator_html_repr
 from sklearn.metrics import (
     classification_report,
@@ -24,17 +24,14 @@ from sklearn.metrics import (
     log_loss,
     confusion_matrix
 )
-import numpy as np
-import tempfile
-from dotenv import load_dotenv
-
-# Force UTF-8 encoding
-if sys.platform.startswith('win'):
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 # Load environment variables
 load_dotenv()
+
+# Force UTF-8 encoding for standard output and error
+if sys.platform.startswith('win'):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 def setup_mlflow(server, experiment_name):
     """Configure MLflow and set the experiment."""
@@ -56,15 +53,6 @@ def setup_mlflow(server, experiment_name):
             mlflow.set_tracking_uri("file:///./mlruns")
             print("MLflow tracking locally to directory: ./mlruns")
 
-    # If run in 'mlflow run' context, verify if the run exists in the newly set tracking URI.
-    if "MLFLOW_RUN_ID" in os.environ:
-        run_id = os.environ["MLFLOW_RUN_ID"]
-        try:
-            mlflow.tracking.MlflowClient().get_run(run_id)
-        except Exception:
-            print(f"Warning: Run ID {run_id} from MLFLOW_RUN_ID was not found in the current tracking URI.")
-            os.environ.pop("MLFLOW_RUN_ID", None)
-
     mlflow.set_experiment(experiment_name)
 
 def load_data(dataset_dir):
@@ -83,11 +71,29 @@ def load_data(dataset_dir):
     print("Datasets loaded successfully!")
     return X_train, y_train, X_train_smote, y_train_smote, X_test, y_test
 
-def save_and_log_artifacts(best_model, X_train, X_test, y_test, metrics_dict, output_dir=None, path=None):
-    """Generate and log evaluation plots and reports as artifacts."""
+def eval_metric(model, data, target):
+    """
+    Evaluate the model performance.
+    """
+    y_pred = model.predict(data)
+    y_prob = model.predict_proba(data)[:, 1]
 
-    if path is not None:
-        output_dir = path
+    accuracy = accuracy_score(target, y_pred)
+    precision = precision_score(target, y_pred, average='binary')
+    recall = recall_score(target, y_pred, average='binary')
+    f1 = f1_score(target, y_pred, average='binary')
+    roc_auc = roc_auc_score(target, y_prob)
+    log_loss_val = log_loss(target, y_prob)
+    score = model.score(data, target)
+    
+    tn, fp, fn, tp = confusion_matrix(target, y_pred).ravel()
+    specificity = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+    fpr = fp / (fp + tn) if (fp + tn) > 0 else 0.0
+    
+    return accuracy, precision, recall, f1, roc_auc, log_loss_val, score, specificity, fpr
+
+def save_and_log_artifacts(best_model, X_train, X_test, y_test, metrics_dict, output_dir=None):
+    """Generate and log evaluation plots and reports as artifacts."""
 
     y_test_pred = best_model.predict(X_test)
 
@@ -133,7 +139,7 @@ def save_and_log_artifacts(best_model, X_train, X_test, y_test, metrics_dict, ou
         fig_pr.savefig(os.path.join(target_dir, 'precision_recall_curve.png'))
         plt.close(fig_pr)
 
-        # 7. Feature Importance Plot (Coefficients)
+        # 7. Feature Importance Plot 
         if hasattr(best_model, "coef_"):
             coefficients = best_model.coef_[0]
             feature_names = X_train.columns
@@ -163,33 +169,3 @@ def save_and_log_artifacts(best_model, X_train, X_test, y_test, metrics_dict, ou
         with tempfile.TemporaryDirectory() as tmp_dir:
             _write_artifacts(tmp_dir)
             mlflow.log_artifacts(tmp_dir)
-
-def eval_metric(model, data, target):
-    """
-    Evaluate the model performance.
-    """
-    from sklearn.metrics import (
-        accuracy_score,
-        precision_score,
-        recall_score,
-        f1_score,
-        roc_auc_score,
-        log_loss,
-        confusion_matrix
-    )
-    y_pred = model.predict(data)
-    y_prob = model.predict_proba(data)[:, 1]
-
-    accuracy = accuracy_score(target, y_pred)
-    precision = precision_score(target, y_pred, average='binary')
-    recall = recall_score(target, y_pred, average='binary')
-    f1 = f1_score(target, y_pred, average='binary')
-    roc_auc = roc_auc_score(target, y_prob)
-    log_loss_val = log_loss(target, y_prob)
-    score = model.score(data, target)
-    
-    tn, fp, fn, tp = confusion_matrix(target, y_pred).ravel()
-    specificity = tn / (tn + fp) if (tn + fp) > 0 else 0.0
-    fpr = fp / (fp + tn) if (fp + tn) > 0 else 0.0
-    
-    return accuracy, precision, recall, f1, roc_auc, log_loss_val, score, specificity, fpr

@@ -41,7 +41,7 @@ def main():
     args = parser.parse_args()
     best_params = run_tuning(n_trials=args.trials)
     setup_mlflow('dagshub', 'customer_churn')
-    model_name = os.getenv("MODEL_NAME", "Logistic Regression-Optuna")
+    model_name = "Logistic Regression-Optuna"
     input_example=X_train_smote[0:5]
 
     with mlflow.start_run(run_name= model_name):
@@ -101,7 +101,7 @@ def main():
         script_dir = os.path.dirname(os.path.abspath(__file__))
         repo_root = os.path.dirname(script_dir)
         artifacts_path = os.path.join(repo_root, 'mlartifacts')
-        save_and_log_artifacts(best_model, X_train_smote, X_test, y_test, metrics_dict, path=artifacts_path)
+        save_and_log_artifacts(best_model, X_train_smote, X_test, y_test, metrics_dict, artifacts_path)
 
         print(metrics_dict)
     print("\nModelling and logging complete!")
