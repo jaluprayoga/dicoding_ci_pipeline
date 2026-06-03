@@ -9,7 +9,6 @@ venv/
 
 # MLflow local tracking
 mlruns/
-mlartifacts/
 mlflow.db
 
 .vscode/

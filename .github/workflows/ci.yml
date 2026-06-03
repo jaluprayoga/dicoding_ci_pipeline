@@ -68,18 +68,11 @@ jobs:
 
     - name: Save artifacts to repo
       run: |
-        git config --global user.name "${{ env.GITHUB_USERNAME }}"
-        git config --global user.email "${{ env.GITHUB_EMAIL}}"
-        
-        # Force add the generated training artifacts
-        git add -f MLProject/mlartifact
-        
-        # Add mlruns if it exists
-        if [ -d "mlruns" ]; then git add -f mlruns/; fi
-        if [ -d "MLProject/mlruns" ]; then git add -f MLProject/mlruns/; fi
-        
+        git config --global user.name "${{ env.GITHUB_USERNAME}}"
+        git config --global user.email "${{ env.GITHUB_EMAIL }}"
+        git add -f mlartifacts/
         if [ -n "$(git status --porcelain)" ]; then
-          git commit -m "Save mlruns from CI run [skip ci]"
+          git commit -m "Save mlartifacts from CI run [skip ci]"
           git push origin main
         else
           echo "No changes to commit"
