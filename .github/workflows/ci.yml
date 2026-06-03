@@ -20,11 +20,15 @@ env:
   CSV_URL: "https://raw.githubusercontent.com/jaluprayoga/dicoding_eksperimen_sistem_ml/main/customer_churn_preprocessed"
   TARGET_VAR: "Churn"
   MODEL_NAME: "customer_churn_model"
+  GITHUB_USERNAME: ${{ secrets.GTHUB_USERNAME }}
+  GITHUB_EMAIL: ${{ secrets.GTHUB_EMAIL }}
 
 
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
     - name: Run actions/checkout@v4
@@ -62,14 +66,17 @@ jobs:
         echo "MODEL_VERSION=$MODEL_VERSION" >> $GITHUB_ENV
         echo "Latest model version: $MODEL_VERSION"
 
-    - name: Upload to Github
-      uses: actions/upload-artifact@v4
-      with:
-        name: mlflow-runs-artifacts
-        path: |
-          mlruns/
-          mlartifacts/
-          mlflow.db
+    - name: Save mlruns to repo
+      run: |
+        git config --global user.name "${{ env.GITHUB_USERNAME}}"
+        git config --global user.email "${{ env.GITHUB_EMAIL }}"
+        git add -f mlruns/
+        if [ -n "$(git status --porcelain)" ]; then
+          git commit -m "Save mlruns from CI run [skip ci]"
+          git push origin main
+        else
+          echo "No changes to commit"
+        fi
 
     - name: Build Docker Model
       run: |
@@ -79,15 +86,15 @@ jobs:
       if: ${{ env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' }}
       uses: docker/login-action@v3
       with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
+        username: ${{ env.DOCKERHUB_USERNAME }}
+        password: ${{ env.DOCKERHUB_TOKEN }}
 
     - name: Tag Docker Image
       if: ${{ env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' }}
       run: |
-        docker tag "customer-churn-model:latest" "${{ secrets.DOCKERHUB_USERNAME }}/customer-churn-model:latest"
+        docker tag "customer-churn-model:latest" "${{ env.DOCKERHUB_USERNAME }}/customer-churn-model:latest"
 
     - name: Push Docker Image
       if: ${{ env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' }}
       run: |
-        docker push "${{ secrets.DOCKERHUB_USERNAME }}/customer-churn-model:latest"
+        docker push "${{ env.DOCKERHUB_USERNAME }}/customer-churn-model:latest"
