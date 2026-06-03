@@ -114,7 +114,10 @@ def main():
         )
 
         # Save and log model
-        save_and_log_artifacts(best_model, X_train_smote, X_test, y_test, metrics_dict)
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        repo_root = os.path.dirname(script_dir)
+        artifacts_path = os.path.join(repo_root, 'mlartifacts')
+        save_and_log_artifacts(best_model, X_train_smote, X_test, y_test, metrics_dict, path=artifacts_path)
 
         print(metrics_dict)
     print("\nModelling and logging complete!")

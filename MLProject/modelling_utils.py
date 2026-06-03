@@ -74,26 +74,28 @@ def load_data(dataset_dir):
     print("Datasets loaded successfully!")
     return X_train, y_train, X_train_smote, y_train_smote, X_test, y_test
 
-def save_and_log_artifacts(best_model, X_train, X_test, y_test, metrics_dict):
+def save_and_log_artifacts(best_model, X_train, X_test, y_test, metrics_dict, path):
     """Generate and log evaluation plots and reports as artifacts."""
-    os.makedirs('mlartifacts', exist_ok=True)
+    os.makedirs(path, exist_ok=True)
     
     y_test_pred = best_model.predict(X_test)
     y_test_prob = best_model.predict_proba(X_test)[:, 1]
 
-    def save_and_log_fig(path):
+    def save_and_log_fig(filename):
+        full_path = os.path.join(path, filename)
         plt.tight_layout()
-        plt.savefig(path)
+        plt.savefig(full_path)
         plt.close()
-        mlflow.log_artifact(path)
+        mlflow.log_artifact(full_path)
 
-    def write_and_log_file(path, content, is_json=False):
-        with open(path, 'w', encoding='utf-8') as f:
+    def write_and_log_file(filename, content, is_json=False):
+        full_path = os.path.join(path, filename)
+        with open(full_path, 'w', encoding='utf-8') as f:
             if is_json:
                 json.dump(content, f, indent=4)
             else:
                 f.write(content)
-        mlflow.log_artifact(path)
+        mlflow.log_artifact(full_path)
 
     # Confusion Matrix
     cm = confusion_matrix(y_test, y_test_pred)
@@ -104,13 +106,13 @@ def save_and_log_artifacts(best_model, X_train, X_test, y_test, metrics_dict):
     plt.ylabel('Actual Label')
     plt.xlabel('Predicted Label')
     plt.title('Confusion Matrix')
-    save_and_log_fig('mlartifacts/confusion_matrix.png')
+    save_and_log_fig('confusion_matrix.png')
 
     # Estimator HTML representation
-    write_and_log_file('mlartifacts/estimator.html', estimator_html_repr(best_model))
+    write_and_log_file('estimator.html', estimator_html_repr(best_model))
 
     # Metric Info JSON
-    write_and_log_file('mlartifacts/metric_info.json', metrics_dict, is_json=True)
+    write_and_log_file('metric_info.json', metrics_dict, is_json=True)
 
     # ROC Curve
     fpr, tpr, _ = roc_curve(y_test, y_test_prob)
@@ -124,14 +126,14 @@ def save_and_log_artifacts(best_model, X_train, X_test, y_test, metrics_dict):
     plt.ylabel('True Positive Rate')
     plt.title('ROC Curve')
     plt.legend(loc="lower right")
-    save_and_log_fig('mlartifacts/roc_curve.png')
+    save_and_log_fig('roc_curve.png')
 
     # Classification Report
     report_text = classification_report(y_test, y_test_pred, target_names=['No Churn', 'Churn'])
-    write_and_log_file('mlartifacts/classification_report.txt', report_text)
+    write_and_log_file('classification_report.txt', report_text)
 
     # Save model locally
-    local_model_path = 'mlartifacts/model'
+    local_model_path = os.path.join(path, 'model')
     if os.path.exists(local_model_path):
         shutil.rmtree(local_model_path)
     mlflow.sklearn.save_model(sk_model=best_model, path=local_model_path)

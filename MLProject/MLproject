@@ -8,4 +8,4 @@ entry_points:
       trials:
         type: int
         default: 20
-    command: "python MLProject/modelling_tuning.py --trials {trials}"
+    command: "python modelling_tuning.py --trials {trials}"
